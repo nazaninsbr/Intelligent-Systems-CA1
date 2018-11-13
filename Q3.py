@@ -9,6 +9,7 @@ import os
 
 
 ITERATION = 200
+P = 3
 KNN_DATA_FILE = './HW#01_Datasets/KNN/data.mat'
 KNN_LABELS_FILE = './HW#01_Datasets/KNN/labels.mat'
 
@@ -26,6 +27,25 @@ def calculateDist(ins, center):
 		dist += (ins[i] - center[i]) ** 2
 	dist = math.sqrt(dist)
 	return dist
+
+def calculateMinkowskiDistance(ins, center):
+	dist = 0
+	for i in range(0, len(ins)):
+		if i==len(ins):
+			break
+		dist += abs(ins[i] - center[i]) ** P
+	dist = dist**(1/float(P))
+	return dist
+
+def calculateChebyshevDistance(ins, center):
+	max_dist = 0
+	for i in range(0, len(ins)):
+		if i==len(ins):
+			break
+		dist = abs(ins[i] - center[i])
+		if dist>max_dist:
+			max_dist = dist
+	return max_dist
 
 def calculateManhattanDist(ins, center):
 	dist = 0
@@ -49,494 +69,208 @@ def calculateCosineSimilarity(ins, center):
 		return 1
 	return dot/(math.sqrt(norm_1)*math.sqrt(norm_2))
 
-def findMeanOfEverything(cluster):
-	if len(cluster)==0:
-		return [0, 0, 0, 0]
-	s = []
-	for fieldId in range(len(cluster[0][1])):
-		s.append(0)
-		for ins in cluster:
-			s[-1] += ins[1][fieldId]
-		s[-1] /= len(cluster)
-	return s
-
-def clusterBasedOnEveryThingWithEuclideanDistance(server_data, k):
-	resultingCenters = {}
-	resultingClusters = {}
-	for k_num in k:
-		print("For k = "+str(k_num)+":")
-		# create the initial clusters
-		server_data_copy = copy.deepcopy(server_data)
-		centers = {}
-		clusters = {}
-		for i in range(k_num):
-			ind = random.randint(0, len(server_data_copy)-1)
-			centers[i] = server_data_copy[ind]
-			clusters[i] = []
-			clusters[i].append([ind, server_data_copy[ind]])
-			del server_data_copy[ind]
-
-		for ind, ins in enumerate(server_data_copy):
-			minDist = sys.maxsize
-			clusterNum = -1
-			for center in centers.keys():
-				dist = calculateDist(ins, centers[center])
-				if dist < minDist:
-					minDist = dist
-					clusterNum = center
-			clusters[clusterNum].append([ind, ins])
-
-		# run the clustering algo.
-		for inter_num in range(ITERATION):
-			# calculate new centers 
-			for clusterNum in clusters.keys():
-				mean = findMeanOfEverything(clusters[clusterNum])
-				centers[clusterNum] = [mean[0], mean[1], mean[2], mean[3]]
-
-			# reassign elements
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) == insId:
-						break
-					minDist = sys.maxsize
-					newClusterNum = -1
-					for center in centers.keys():
-						dist = calculateDist(clusters[clusterNum][insId][1], centers[center])
-						if dist < minDist:
-							minDist = dist
-							newClusterNum = center
-
-					clusters[newClusterNum].append(clusters[clusterNum][insId])
-					del clusters[clusterNum][insId]
-
-			# cost function 
-			cost_func = 0
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) == insId:
-						break 
-					cost_func += (calculateDist(clusters[clusterNum][insId][1], centers[clusterNum]))**2
-
-			cost_func = cost_func / len(server_data)
-			plt.scatter(inter_num, cost_func, color='black')
-			# print('Cost : ', cost_func)
-
-		print('Cluster Centers: ')
-		print(centers)
-		resultingCenters[k_num] = centers
-		resultingClusters[k_num] = clusters
-		# print distances 
-		inner_dist = 0
-		outer_dist = 0
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				inner_dist += calculateDist(val[1], centers[centerId])
-
-		inner_dist = inner_dist/len(server_data)
-
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				for centerId2 in centers.keys():
-					if not centerId2==centerId:
-						outer_dist += calculateDist(val[1], centers[centerId2])
-
-		outer_dist = outer_dist/len(server_data)
-
-		print("Inner dist: "+str(inner_dist))
-		print("Outer dist: "+str(outer_dist))
-
-		for clusterNum in clusters.keys():
-			fileName = str(k_num)+'_'+str(clusterNum)+'_Kcluster.txt'
-			try:
-				os.remove(fileName)
-			except OSError:
-				pass
-			with open(fileName, 'a') as the_file:
-				for item in clusters[clusterNum]:
-					the_file.write(str(item))
-					the_file.write('\n')
-
-		plt.show()
-
-	return resultingCenters, resultingClusters
-
-def clusterBasedOnEveryThingWithManhattanDistance(server_data, k):
-	resultingCenters = {}
-	resultingClusters = {}
-	for k_num in k:
-		print("For k = "+str(k_num)+":")
-		# create the initial clusters
-		server_data_copy = copy.deepcopy(server_data)
-		centers = {}
-		clusters = {}
-		for i in range(k_num):
-			ind = random.randint(0, len(server_data_copy)-1)
-			centers[i] = server_data_copy[ind]
-			clusters[i] = []
-			clusters[i].append([ind, server_data_copy[ind]])
-			del server_data_copy[ind]
-
-		for ind, ins in enumerate(server_data_copy):
-			minDist = sys.maxsize
-			clusterNum = -1
-			for center in centers.keys():
-				dist = calculateManhattanDist(ins, centers[center])
-				if dist < minDist:
-					minDist = dist
-					clusterNum = center
-			clusters[clusterNum].append([ind, ins])
-
-		# run the clustering algo.
-		for inter_num in range(ITERATION):
-			# calculate new centers 
-			for clusterNum in clusters.keys():
-				mean = findMeanOfEverything(clusters[clusterNum])
-				centers[clusterNum] = [mean[0], mean[1], mean[2], mean[3]]
-
-			# reassign elements
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) == insId:
-						break
-					minDist = sys.maxsize
-					newClusterNum = -1
-					for center in centers.keys():
-						dist = calculateManhattanDist(clusters[clusterNum][insId][1], centers[center])
-						if dist < minDist:
-							minDist = dist
-							newClusterNum = center
-
-					clusters[newClusterNum].append(clusters[clusterNum][insId])
-					del clusters[clusterNum][insId]
-
-			# cost function 
-			cost_func = 0
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) == insId:
-						break 
-					cost_func += (calculateManhattanDist(clusters[clusterNum][insId][1], centers[clusterNum]))**2
-
-			cost_func = cost_func / len(server_data)
-			plt.scatter(inter_num, cost_func, color='black')
-			# print('Cost : ', cost_func)
-
-		print('Cluster Centers: ')
-		print(centers)
-		resultingCenters[k_num] = centers
-		resultingClusters[k_num] = clusters
-		# print distances 
-		inner_dist = 0
-		outer_dist = 0
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				inner_dist += calculateManhattanDist(val[1], centers[centerId])
-
-		inner_dist = inner_dist/len(server_data)
-
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				for centerId2 in centers.keys():
-					if not centerId2==centerId:
-						outer_dist += calculateManhattanDist(val[1], centers[centerId2])
-
-		outer_dist = outer_dist/len(server_data)
-
-		print("Inner dist: "+str(inner_dist))
-		print("Outer dist: "+str(outer_dist))
-
-		for clusterNum in clusters.keys():
-			fileName = str(k_num)+'_'+str(clusterNum)+'_Kcluster_Manhattan_dist.txt'
-			try:
-				os.remove(fileName)
-			except OSError:
-				pass
-			with open(fileName, 'a') as the_file:
-				for item in clusters[clusterNum]:
-					the_file.write(str(item))
-					the_file.write('\n')
-
-		plt.show()
-
-	return resultingCenters, resultingClusters
-
-def clusterBasedOnEveryThingWithCosineSimilarity(server_data, k):
-	resultingCenters = {}
-	resultingClusters = {}
-	for k_num in k:
-		print("For k = "+str(k_num)+":")
-		# create the initial clusters
-		server_data_copy = copy.deepcopy(server_data)
-		centers = {}
-		clusters = {}
-		for i in range(k_num):
-			ind = random.randint(0, len(server_data_copy)-1)
-			centers[i] = server_data_copy[ind]
-			clusters[i] = []
-			clusters[i].append([ind, server_data_copy[ind]])
-			del server_data_copy[ind]
-
-		for ind, ins in enumerate(server_data_copy):
-			minDist = sys.maxsize
-			clusterNum = -1
-			for center in centers.keys():
-				dist = calculateCosineSimilarity(ins, centers[center])
-				if dist < minDist:
-					minDist = dist
-					clusterNum = center
-			clusters[clusterNum].append([ind, ins])
-
-		# run the clustering algo.
-		for inter_num in range(ITERATION):
-			# calculate new centers 
-			for clusterNum in clusters.keys():
-				mean = findMeanOfEverything(clusters[clusterNum])
-				centers[clusterNum] = [mean[0], mean[1], mean[2], mean[3]]
-
-			# reassign elements
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) <= insId:
-						break
-					minDist = sys.maxsize
-					newClusterNum = -1
-					for center in centers.keys():
-						dist = calculateCosineSimilarity(clusters[clusterNum][insId][1], centers[center])
-						if dist < minDist:
-							minDist = dist
-							newClusterNum = center
-
-					clusters[newClusterNum].append(clusters[clusterNum][insId])
-					del clusters[clusterNum][insId]
-
-			# cost function 
-			cost_func = 0
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) == insId:
-						break 
-					cost_func += (calculateCosineSimilarity(clusters[clusterNum][insId][1], centers[clusterNum]))**2
-
-			cost_func = cost_func / len(server_data)
-			plt.scatter(inter_num, cost_func, color='black')
-			# print('Cost : ', cost_func)
-
-		print('Cluster Centers: ')
-		print(centers)
-		resultingCenters[k_num] = centers
-		resultingClusters[k_num] = clusters
-		# print distances 
-		inner_dist = 0
-		outer_dist = 0
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				inner_dist += calculateCosineSimilarity(val[1], centers[centerId])
-
-		inner_dist = inner_dist/len(server_data)
-
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				for centerId2 in centers.keys():
-					if not centerId2==centerId:
-						outer_dist += calculateCosineSimilarity(val[1], centers[centerId2])
-
-		outer_dist = outer_dist/len(server_data)
-
-		print("Inner dist: "+str(inner_dist))
-		print("Outer dist: "+str(outer_dist))
-
-		for clusterNum in clusters.keys():
-			fileName = str(k_num)+'_'+str(clusterNum)+'_Kcluster_cosine_sim.txt'
-			try:
-				os.remove(fileName)
-			except OSError:
-				pass
-			with open(fileName, 'a') as the_file:
-				for item in clusters[clusterNum]:
-					the_file.write(str(item))
-					the_file.write('\n')
-
-		plt.show()
-
-	return resultingCenters, resultingClusters
-
-
-def answer_to_question_123_no_cross_validation(data, labels, k):
-	print('Algo with distance #1')
-	myCenters1, myClusters1 = clusterBasedOnEveryThingWithEuclideanDistance(data, k)
-	majorities1 = calculate_cluster_majority(myClusters1, labels)
-	stats1 = calculate_how_many_wrongly_classified(myClusters1, labels, majorities1)
-	for kVal in stats1.keys():
-		print('with Euclidean distance for k = {}, {} of {} instances wrongly clustered'.format(kVal, stats1[kVal][1], stats1[kVal][0]))
-	print('Algo with distance #2')
-	myCenters2, myClusters2 = clusterBasedOnEveryThingWithManhattanDistance(data, k)
-	majorities2 = calculate_cluster_majority(myClusters2, labels)
-	stats2 = calculate_how_many_wrongly_classified(myClusters2, labels, majorities2)
-	for kVal in stats1.keys():
-		print('with manhattan distance for k = {}, {} of {} instances wrongly clustered'.format(kVal, stats2[kVal][1], stats2[kVal][0]))
-	print('Algo with distance #3')
-	myCenters3, myClusters3 = clusterBasedOnEveryThingWithCosineSimilarity(data, k)
-	majorities3 = calculate_cluster_majority(myClusters3, labels)
-	stats3 = calculate_how_many_wrongly_classified(myClusters3, labels, majorities3)
-	for kVal in stats1.keys():
-		print('with cosine similarity for k = {}, {} of {} instances wrongly clustered'.format(kVal, stats3[kVal][1], stats3[kVal][0]))
-
-def find_cluster_centers(data, labels, k):
-	seen_classes, centers = [], []
+def create_6_folds(data):
+	folds = {0:[], 1:[], 2:[], 3:[], 4:[], 5:[]}
 	for ind, ins in enumerate(data):
-		if len(centers)==k:
-			break
-		if not labels[ind] in seen_classes:
-			seen_classes.append(labels[ind])
-			centers.append(ind)
-	return centers
+		if ind<len(data)/6:
+			folds[0].append([ind, ins])
+		elif ind<2*len(data)/6:
+			folds[1].append([ind, ins])
+		elif ind<3*len(data)/6:
+			folds[2].append([ind, ins])
+		elif ind<4*len(data)/6:
+			folds[3].append([ind, ins])
+		elif ind<5*len(data)/6:
+			folds[4].append([ind, ins])
+		else:
+			folds[5].append([ind, ins])
+	return folds
 
-def clusterGivenInitialCenters(initial_centers, server_data, k):
-	resultingCenters = {}
-	resultingClusters = {}
-	for k_num in k:
-		print("For k = "+str(k_num)+":")
-		# create the initial clusters
-		server_data_copy = copy.deepcopy(server_data)
-		centers = {}
-		clusters = {}
-		for i in range(k_num):
-			ind = initial_centers[i]
-			centers[i] = server_data_copy[ind]
-			clusters[i] = []
-			clusters[i].append([ind, server_data_copy[ind]])
-			del server_data_copy[ind]
+def create_train_test_folds(folds, fold_num):
+	test_set = folds[fold_num]
+	training_set = []
+	for x in folds.keys():
+		if not x==fold_num:
+			training_set.extend(folds[x])
+	return training_set, test_set
 
-		for ind, ins in enumerate(server_data_copy):
-			minDist = sys.maxsize
-			clusterNum = -1
-			for center in centers.keys():
-				dist = calculateDist(ins, centers[center])
-				if dist < minDist:
-					minDist = dist
-					clusterNum = center
-			clusters[clusterNum].append([ind, ins])
+def sort_based_on_distance(distances, indexes):  
+	sorted_distances, sorted_indexes = copy.deepcopy(distances), copy.deepcopy(indexes)
+	for i in range(1, len(distances)): 
+  
+		key = sorted_distances[i] 
+		index_val = sorted_indexes[i]
+		j = i-1
+		while j >=0 and key < sorted_distances[j] : 
+				sorted_distances[j+1] = sorted_distances[j]
+				sorted_indexes[j+1] = sorted_indexes[j] 
+				j -= 1
+		sorted_distances[j+1] = key 
+		sorted_indexes[j+1] = index_val
+	return sorted_distances, sorted_indexes
 
-		# run the clustering algo.
-		for inter_num in range(ITERATION):
-			# calculate new centers 
-			for clusterNum in clusters.keys():
-				mean = findMeanOfEverything(clusters[clusterNum])
-				centers[clusterNum] = [mean[0], mean[1], mean[2], mean[3]]
+def find_k_closest(x, training_set, k, distance_type):
+	distances = []
+	indexes = []
+	for ind, ins in enumerate(training_set):
+		if distance_type=='E':
+			dist = calculateDist(ins[1], x[1])
+		elif distance_type=='M':
+			dist = calculateManhattanDist(ins[1], x[1])
+		elif distance_type=='C':
+			dist = calculateCosineSimilarity(ins[1], x[1])
+		elif distance_type=='Minkowski':
+			dist = calculateMinkowskiDistance(ins[1], x[1])
+		elif distance_type=='Chebyshev':
+			dist = calculateChebyshevDistance(ins[1], x[1])
+		distances.append(dist)
+		indexes.append(ind)
 
-			# reassign elements
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) == insId:
-						break
-					minDist = sys.maxsize
-					newClusterNum = -1
-					for center in centers.keys():
-						dist = calculateDist(clusters[clusterNum][insId][1], centers[center])
-						if dist < minDist:
-							minDist = dist
-							newClusterNum = center
+	sorted_distances, sorted_indexes = sort_based_on_distance(distances, indexes)
 
-					clusters[newClusterNum].append(clusters[clusterNum][insId])
-					del clusters[clusterNum][insId]
+	nearerst = []
+	for i in range(k):
+		nearerst.append(training_set[sorted_indexes[i]])
 
-			# cost function 
-			cost_func = 0
-			for clusterNum in clusters.keys():
-				for insId in range(len(clusters[clusterNum])):
-					if len(clusters[clusterNum]) == insId:
-						break 
-					cost_func += (calculateDist(clusters[clusterNum][insId][1], centers[clusterNum]))**2
-
-			cost_func = cost_func / len(server_data)
-			plt.scatter(inter_num, cost_func, color='black')
-			# print('Cost : ', cost_func)
-
-		print('Cluster Centers: ')
-		print(centers)
-		resultingCenters[k_num] = centers
-		resultingClusters[k_num] = clusters
-		# print distances 
-		inner_dist = 0
-		outer_dist = 0
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				inner_dist += calculateDist(val[1], centers[centerId])
-
-		inner_dist = inner_dist/len(server_data)
-
-		for centerId in centers.keys():
-			for val in clusters[centerId]:
-				for centerId2 in centers.keys():
-					if not centerId2==centerId:
-						outer_dist += calculateDist(val[1], centers[centerId2])
-
-		outer_dist = outer_dist/len(server_data)
-
-		print("Inner dist: "+str(inner_dist))
-		print("Outer dist: "+str(outer_dist))
-
-		for clusterNum in clusters.keys():
-			fileName = str(k_num)+'_'+str(clusterNum)+'_Kcluster_initial_centers.txt'
-			try:
-				os.remove(fileName)
-			except OSError:
-				pass
-			with open(fileName, 'a') as the_file:
-				for item in clusters[clusterNum]:
-					the_file.write(str(item))
-					the_file.write('\n')
-
-		plt.show()
-
-	return resultingCenters, resultingClusters
-
+	return nearerst
 
 def find_most_seen(count_each_class):
-	if count_each_class[0]>=count_each_class[1] and count_each_class[0]>=count_each_class[2]:
+	if count_each_class[1]>=count_each_class[2] and count_each_class[1]>=count_each_class[3]:
 		return 1
-	if count_each_class[1]>=count_each_class[0] and count_each_class[1]>=count_each_class[2]:
+	if count_each_class[2]>=count_each_class[1] and count_each_class[2]>=count_each_class[3]:
 		return 2
-	if count_each_class[2]>=count_each_class[1] and count_each_class[2]>=count_each_class[0]:
+	if count_each_class[3]>=count_each_class[1] and count_each_class[3]>=count_each_class[2]:
 		return 3
 
-def calculate_cluster_majority(myClusters, labels):
-	majority = {}
-	for kVal in myClusters.keys():
-		majority[kVal] = {}
-		for classNumber in myClusters[kVal].keys():
-			count_each_class = [0, 0, 0]
-			for ins in myClusters[kVal][classNumber]:
-				count_each_class[labels[ins[0]][0]-1] +=1
-			majority[kVal][classNumber] = find_most_seen(count_each_class)
-	return majority
+def find_predicted_class(A, labels):
+	count = {1:0, 2:0, 3:0}
+	for ins in A:
+		l = labels[ins[0]][0]
+		count[l] += 1
+	return find_most_seen(count)
 
-def calculate_how_many_wrongly_classified(myClusters, labels, majority):
-	stats = {}
-	for kVal in myClusters.keys():
-		all_instances, wrongly_clustered = 0, 0
-		for classNumber in myClusters[kVal].keys(): 
-			for ins in myClusters[kVal][classNumber]:
+def knn(folds, labels, k):
+	print('distance type 1')
+	for k_num in k:
+		all_instances = 0
+		wrongly_classified = 0
+		for fold_num in range(6):
+			training_set, test_set = create_train_test_folds(folds, fold_num)
+
+			for x in test_set:
 				all_instances += 1
-				if not labels[ins[0]][0]==majority[kVal][classNumber]:
-					# print("ins: {}, label: {}, majority:{}".format(ins, labels[ins[0]][0], majority[kVal][classNumber]))
-					wrongly_clustered += 1
-		stats[kVal] = [all_instances, wrongly_clustered]
-	return stats
+				A = find_k_closest(x, training_set, k_num, 'E')
+				pred_class = find_predicted_class(A, labels)
+				if not pred_class==labels[x[0]][0]:
+					wrongly_classified += 1
+		print('for k = {}, {} of {} instances wrongly classified'.format(k_num, wrongly_classified, all_instances))
+
+def knn_with_manhattan(folds, labels, k):
+	print('distance type 2')
+	for k_num in k:
+		all_instances = 0
+		wrongly_classified = 0
+		for fold_num in range(6):
+			training_set, test_set = create_train_test_folds(folds, fold_num)
+
+			for x in test_set:
+				all_instances += 1
+				A = find_k_closest(x, training_set, k_num, 'M')
+				pred_class = find_predicted_class(A, labels)
+				if not pred_class==labels[x[0]][0]:
+					wrongly_classified += 1
+		print('for k = {}, {} of {} instances wrongly classified'.format(k_num, wrongly_classified, all_instances))
+
+def knn_with_cosine_similarity(folds, labels, k):
+	print('distance type 3')
+	for k_num in k:
+		all_instances = 0
+		wrongly_classified = 0
+		for fold_num in range(6):
+			training_set, test_set = create_train_test_folds(folds, fold_num)
+
+			for x in test_set:
+				all_instances += 1
+				A = find_k_closest(x, training_set, k_num, 'C')
+				pred_class = find_predicted_class(A, labels)
+				if not pred_class==labels[x[0]][0]:
+					wrongly_classified += 1
+		print('for k = {}, {} of {} instances wrongly classified'.format(k_num, wrongly_classified, all_instances))
+
+def knn_with_Minkowski_distance(folds, labels, k):
+	print('distance type 4')
+	for k_num in k:
+		all_instances = 0
+		wrongly_classified = 0
+		for fold_num in range(6):
+			training_set, test_set = create_train_test_folds(folds, fold_num)
+
+			for x in test_set:
+				all_instances += 1
+				A = find_k_closest(x, training_set, k_num, 'Minkowski')
+				pred_class = find_predicted_class(A, labels)
+				if not pred_class==labels[x[0]][0]:
+					wrongly_classified += 1
+		print('for k = {}, {} of {} instances wrongly classified'.format(k_num, wrongly_classified, all_instances))
+
+def knn_with_Chebyshev_distance(folds, labels, k):
+	print('distance type 5')
+	for k_num in k:
+		all_instances = 0
+		wrongly_classified = 0
+		for fold_num in range(6):
+			training_set, test_set = create_train_test_folds(folds, fold_num)
+
+			for x in test_set:
+				all_instances += 1
+				A = find_k_closest(x, training_set, k_num, 'Chebyshev')
+				pred_class = find_predicted_class(A, labels)
+				if not pred_class==labels[x[0]][0]:
+					wrongly_classified += 1
+		print('for k = {}, {} of {} instances wrongly classified'.format(k_num, wrongly_classified, all_instances))
 
 
-def extra_answer_to_question_3(data, labels, k):
-	initial_centers = find_cluster_centers(data, labels, k)
-	myCenters, myClusters = clusterGivenInitialCenters(initial_centers, data, [3])
-	majorities = calculate_cluster_majority(myClusters, labels)
-	stats = calculate_how_many_wrongly_classified(myClusters, labels, majorities)
-	print('{} of {} instances wrongly clustered'.format(stats[3][1], stats[3][0]))
+def answer_to_question_12(data, labels, k):
+	folds = create_6_folds(data)
+	knn(folds, labels, k)
+	knn_with_manhattan(folds, labels, k)
+	knn_with_cosine_similarity(folds, labels, k)
 
+def normalize_data(data):
+	d = copy.deepcopy(data)
+	m1, m2, m3, m4 = 0, 0, 0, 0
+	for ins in d:
+		m1 += ins[0]
+		m2 += ins[1]
+		m3 += ins[2]
+		m4 += ins[3]
+
+	m1, m2, m3, m4 = m1/len(d), m2/len(d), m3/len(d), m4/len(d)
+
+	for ind, ins in enumerate(d):
+		d[ind] = [(ins[0]-m1)/10, (ins[1]-m2)/10, (ins[2]-m3)/10, (ins[3]-m4)/10]
+	return d
+
+
+def method_1_for_q3(data, labels, k):
+	print('after normalization')
+	normalized_data = normalize_data(data)
+	folds = create_6_folds(normalized_data)
+	knn(folds, labels, k)
+	knn_with_manhattan(folds, labels, k)
+	knn_with_cosine_similarity(folds, labels, k)
+
+def method_2_for_q3(data, labels, k):
+	print('back to not normalized data')
+	folds = create_6_folds(data)
+	knn_with_Minkowski_distance(folds, labels, k)
+	knn_with_Chebyshev_distance(folds, labels, k)
 
 def main():
 	data, labels = get_the_data()
-	answer_to_question_123_no_cross_validation(data.tolist(), labels.tolist(), [3, 5, 7, 9])
-	# extra_answer_to_question_3(data.tolist(), labels.tolist(), 3)
+	answer_to_question_12(data.tolist(), labels.tolist(), [3, 5, 7, 9])
+	method_1_for_q3(data.tolist(), labels.tolist(), [3, 5, 7, 9])
+	method_2_for_q3(data.tolist(), labels.tolist(), [3, 5, 7, 9])
 
 
 if __name__ == '__main__':
